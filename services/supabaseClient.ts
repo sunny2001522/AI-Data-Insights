@@ -12,5 +12,11 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 // 對應資料庫 Table 名稱
 export const DB_TABLES = {
   PRODUCTS: 'product', 
-  USERS: 'user'
+  USERS: 'user',
+  REPORTS: 'reports' // Assuming a table for reports, or we store in localstorage fallback
+};
+
+// Helper to log errors properly
+export const logSupabaseError = (action: string, error: any) => {
+    console.error(`Supabase ${action} Error:`, JSON.stringify(error, null, 2));
 };

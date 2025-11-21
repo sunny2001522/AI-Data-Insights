@@ -1,4 +1,4 @@
-import { ReportData } from "../types";
+import { ReportData, DailyStat } from "../types";
 
 // Since we cannot perform actual backend scraping in this frontend-only demo environment,
 // we simulate the data collection phase that would normally happen in Python/Node.
@@ -16,6 +16,24 @@ export const fetchAppData = async (appId: string): Promise<ReportData> => {
 
   const retention = parseFloat((35 + Math.random() * 10).toFixed(1));
 
+  // Generate mock daily stats
+  const dailyStats: DailyStat[] = [];
+  const today = new Date();
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    
+    // Add some random noise
+    const noiseD = 0.8 + Math.random() * 0.4; 
+    const noiseA = 0.9 + Math.random() * 0.2;
+    
+    dailyStats.push({
+      date: d.toISOString().split('T')[0].slice(5), // "MM-DD"
+      downloads: Math.floor((downloads / 7) * noiseD),
+      activeUsers: Math.floor((activeUsers / 7) * noiseA)
+    });
+  }
+
   return {
     metrics: {
       weekStart: new Date().toISOString().split('T')[0],
@@ -23,6 +41,7 @@ export const fetchAppData = async (appId: string): Promise<ReportData> => {
       activeUsers,
       retention7d: retention,
     },
+    dailyStats,
     wow: {
       downloads: parseFloat(((Math.random() * 20) - 5).toFixed(1)), // -5% to +15%
       activeUsers: parseFloat(((Math.random() * 15) - 5).toFixed(1)),

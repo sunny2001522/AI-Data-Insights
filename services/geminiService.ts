@@ -1,60 +1,66 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
-import { ReportData, AnalysisResult } from "../types";
+import { GoogleGenAI } from "@google/genai";
+import { ReportData, AnalysisResult, AppConfig } from "../types";
 
-// NOTE: In a real production app, API keys should be handled via a backend proxy.
 const API_KEY = process.env.API_KEY || ''; 
-
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 
-export const analyzeData = async (appName: string, data: ReportData): Promise<AnalysisResult> => {
+export const analyzeData = async (appConfig: AppConfig, data: ReportData): Promise<AnalysisResult> => {
   const modelId = "gemini-2.0-flash"; 
 
+  const storeInfo = appConfig.appStoreLink || appConfig.playStoreLink 
+    ? `App Store/Play Store 連結已提供，請假設你已爬取了最新的用戶評論與評分趨勢 (模擬數據)。` 
+    : `未提供商店連結，請基於一般市場趨勢模擬評論數據。`;
+
   const prompt = `
-    你是一位資深的產品數據分析師。請根據以下數據進行深度歸因分析,並生成可執行的決策建議。
-    同時，你需要為這些分析生成 4-5 張 PPT 簡報的內容結構。
+    你是一位頂尖的產品數據分析師。請根據以下數據進行分析,並生成週報。
+    
+    【產品資訊】
+    - App 名稱: ${appConfig.name}
+    - Store 資訊: ${storeInfo}
 
-    【基礎數據】
-    - App 名稱: ${appName}
-    - 本週數據: 下載 ${data.metrics.downloads}, 活躍用戶 ${data.metrics.activeUsers}, 7日留存 ${data.metrics.retention7d}%
-    - WoW 變化: 下載 ${data.wow.downloads}%, 活躍 ${data.wow.activeUsers}%, 留存 ${data.wow.retention}%
+    【本週核心數據】
+    - 總下載: ${data.metrics.downloads.toLocaleString()} (WoW: ${data.wow.downloads}%)
+    - 活躍用戶(WAU): ${data.metrics.activeUsers.toLocaleString()} (WoW: ${data.wow.activeUsers}%)
+    - 7日留存: ${data.metrics.retention7d}% (WoW: ${data.wow.retention}%)
+    
+    【日趨勢數據 (最近7天)】
+    ${JSON.stringify(data.dailyStats)}
 
-    【外部數據 (模擬)】
+    【外部情報 (模擬)】
     - 產品更新: ${JSON.stringify(data.productUpdates)}
-    - 用戶評論摘要: ${data.reviewsSummary}
-    - 社群聲量: ${data.socialMentions}
+    - 社群與評論: ${data.reviewsSummary} ${data.socialMentions}
 
+    【分析要求】
+    1. **深度歸因與行動合併**: 請不要分開寫洞見和建議。針對每個觀察到的現象 (歸因)，直接給出對應的具體行動。
+       例如: "連假造成活躍下降 (現象) -> 宜趁連假末尾加大推播曝光 (行動)"。
+    2. **下週 OKR**: 根據當前趨勢與 WoW，設定合理的下週目標。
+    3. **每日數據解讀**: 觀察日趨勢數據，指出是否有特定日期的異常波動。
+    
     請按以下 JSON 格式輸出: 
     { 
         "health_status": "正常" | "需關注" | "異常", 
-        "summary": "數據健康度總評 (50字內)", 
-        "insights": [ 
+        "summary": "數據健康度總評與日趨勢觀察 (80字內)", 
+        "merged_insights": [ 
             { 
-                "title": "洞見標題", 
-                "description": "詳細說明 (100字內)", 
-                "evidence": "證據來源", 
-                "impact_level": "高" | "中" | "低", 
-                "links": ["相關連結"] 
+                "title": "分析主題 (如: 留存率下滑、活躍度異常)", 
+                "observation": "觀察到的現象與歸因 (e.g. 近日收到低星評價導致留存下降)", 
+                "action": "具體建議行動 (e.g. 優先修復 Bug 並回覆評論)",
+                "evidence": "數據或評論來源", 
+                "impact_level": "高" | "中" | "低"
             } 
         ], 
-        "actions": [ 
-            { 
-                "action": "具體行動建議", 
-                "priority": "高" | "中" | "低", 
-                "expected_impact": "預期影響" 
-            } 
-        ], 
-        "risks": ["風險警示 (若有異常)"], 
+        "risks": ["風險警示"], 
         "next_week_target": { 
-            "downloads": 1000, 
-            "active_users": 5000, 
-            "retention_7d": 30.5 
+            "downloads": 數值, 
+            "active_users": 數值, 
+            "retention_7d": 數值 
         },
         "slides": [
             {
                 "title": "PPT 標題",
-                "bullets": ["重點 1", "重點 2", "重點 3"],
-                "speaker_notes": "演講備忘稿 (解釋數據背後的原因)"
+                "bullets": ["重點 1", "重點 2"],
+                "speaker_notes": "演講稿"
             }
         ]
     }
@@ -73,29 +79,22 @@ export const analyzeData = async (appName: string, data: ReportData): Promise<An
     let text = response.text;
     if (!text) throw new Error("No response from Gemini");
     
-    // Robust JSON cleaning
-    // 移除 Markdown code blocks
     const match = text.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
-    if (match) {
-      text = match[1];
-    }
+    if (match) text = match[1];
     
-    // 嘗試解析
     let result: AnalysisResult;
     try {
         result = JSON.parse(text) as AnalysisResult;
     } catch (e) {
-        console.error("JSON Parse Error. Raw Text:", text);
-        throw new Error("AI 回傳的格式無法解析，請稍後再試");
+        console.error("JSON Parse Error", text);
+        throw new Error("AI 格式解析失敗");
     }
     
-    // Post-processing to ensure array safety
-    result.insights = result.insights || [];
-    result.actions = result.actions || [];
+    // Defaults
+    result.merged_insights = result.merged_insights || [];
     result.risks = result.risks || [];
     result.slides = result.slides || [];
     
-    // 確保 next_week_target 存在，否則給預設值
     if (!result.next_week_target) {
         result.next_week_target = {
             downloads: Math.round(data.metrics.downloads * 1.05),
