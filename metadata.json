@@ -1,0 +1,5 @@
+{
+  "name": "App Analytics AI",
+  "description": "Automated App Data Analysis System powered by Gemini 2.0 Flash. Collects metrics, detects anomalies, and generates weekly reports.",
+  "requestFramePermissions": []
+}
